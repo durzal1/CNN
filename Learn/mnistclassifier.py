@@ -43,7 +43,7 @@ dataiter = iter(loader_train)
 images, labels = next(dataiter)
 
 # show images
-# imshow(torchvision.utils.make_grid(images))
+imshow(torchvision.utils.make_grid(images))
 
 # Network varaibles
 # 28x28x1 pixel size -> 24x24x6 -> 20x20x20
@@ -64,7 +64,7 @@ class convNet(nn.Module):
     def forward(self,x):
 
         x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
+        x = self.pool(F.relu(self.conv2(x))) # 16 x 16 x 40
         x = x.view(-1,conv2_output_channels*4*4) # 40 channels. 4x4 dimension i got from debugger mode
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
