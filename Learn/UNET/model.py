@@ -2,14 +2,22 @@ import torch
 import torch.nn as nn
 import torchvision.transforms.functional as TF
 
+
+"""
+NOTE: this can only use cpu because i used python lists which obv was not a good idea in retrospect.
+ik you can use a modulelist but i need to store the tensor images. actually i'm not even sure at this point
+but i'm just gonna use cpu cuz i've spent too much time and can't figure it out. 
+ https://discuss.pytorch.org/t/some-tensors-getting-left-on-cpu-despite-calling-model-to-cuda/112915
+"""
+
 class double(nn.Module):
     def __init__(self, input_channels, output_channels):
         super(double,self).__init__()
         self.func = nn.Sequential(
-            nn.Conv2d(input_channels, output_channels,3, bias=False),
+            nn.Conv2d(input_channels, output_channels,3,1,1, bias=False),
             nn.BatchNorm2d(output_channels),
             nn.ReLU(),
-            nn.Conv2d(output_channels, output_channels,3, bias=False),
+            nn.Conv2d(output_channels, output_channels,3,1,1, bias=False),
             nn.BatchNorm2d(output_channels),
             nn.ReLU()
         )
@@ -19,7 +27,7 @@ class double(nn.Module):
 
 class cnnModel(nn.Module):
 
-    def __init__(self, input_channels = 1, out_channels = 1):
+    def __init__(self, input_channels = 3, out_channels = 3):
         super(cnnModel,self).__init__()
 
         self.pool = nn.MaxPool2d(2,2)
@@ -37,7 +45,7 @@ class cnnModel(nn.Module):
 
 
         # first convolutional double layer
-        func = double(1,64)
+        func = double(self.input_channels,64)
         x = func(x)
         self.combineList.append(x)
         x = self.pool(x)
@@ -129,8 +137,4 @@ class cnnModel(nn.Module):
         return self.final_conv(x)
 
 
-x = torch.randn((3, 1, 160, 160))
-model = cnnModel()
-preds = model(x)
 
-assert preds.shape == x.shape

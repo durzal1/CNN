@@ -13,6 +13,7 @@ from model import cnnArchitecture
 from dataset import VOCDataset
 from utils import *
 from loss import YoloLoss
+import albumentations as A
 
 seed = 123
 torch.manual_seed(seed)
