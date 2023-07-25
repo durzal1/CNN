@@ -26,6 +26,7 @@ class UNET(nn.Module):
         self.downs = nn.ModuleList()
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.out_channels = out_channels
+        self.sig = nn.Sigmoid()
         # Down part of UNET
         for feature in features:
             self.downs.append(DoubleConv(in_channels, feature))
@@ -64,4 +65,5 @@ class UNET(nn.Module):
             concat_skip = torch.cat((skip_connection, x), dim=1)
             x = self.ups[idx+1](concat_skip)
         x = self.final_conv(x)
-        return x
+
+        return self.sig(x)

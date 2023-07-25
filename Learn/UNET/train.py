@@ -12,6 +12,10 @@ import cv2
 from albumentations.pytorch import ToTensorV2
 from model2 import UNET
 import torchvision
+import matplotlib
+import matplotlib.pyplot as plt
+from torchvision.utils import save_image
+from PIL import Image
 
 seed = 123
 torch.manual_seed(seed)
@@ -21,17 +25,17 @@ LEARNING_RATE = 1e-4
 DEVICE = "cuda" if torch.cuda.is_available else "cpu"
 BATCH_SIZE = 8
 WEIGHT_DECAY = 0
-EPOCHS = 20
+EPOCHS = 100
 NUM_WORKERS = 2
 PIN_MEMORY = True
 LOAD_MODEL = False
-LOAD_MODEL_FILE = "overfit2.pth.tar"
-IMG_DIR = "data/archive/images"
+LOAD_MODEL_FILE = "final.pth.tar"
+IMG_DIR = "football/images"
 IMAGE_HEIGHT = 160
-IMAGE_WIDTH = 240
+IMAGE_WIDTH = 200
 
 
-def save_checkpoint(state, filename="my_checkpoint.pth.tar"):
+def save_checkpoint(state, filename="final.pth.tar"):
     print("=> Saving checkpoint")
     torch.save(state, filename)
 
@@ -48,7 +52,7 @@ def visualize(image):
     plt.imshow(image)
     plt.show()
 
-def check_accuracy(loader, model, device="cuda"):
+def check_accuracy(loader, model, device=DEVICE):
     num_correct = 0
     num_pixels = 0
     dice_score = 0
@@ -57,9 +61,11 @@ def check_accuracy(loader, model, device="cuda"):
     with torch.no_grad():
         for x, y in loader:
             x = x.to(device)
-            y = y.to(device).unsqueeze(1)
-            preds = torch.sigmoid(model(x))
-            preds = (preds > 0.5).float()
+            y = y.to(device)
+
+            # val, _ = torch.max(preds, dim=1)
+            softmax = nn.Softmax(dim=1 )
+            preds = torch.argmax(softmax(model(x)), axis=1).to(device)
             num_correct += (preds == y).sum()
             num_pixels += torch.numel(preds)
             dice_score += (2 * (preds * y).sum()) / (
@@ -73,19 +79,25 @@ def check_accuracy(loader, model, device="cuda"):
     model.train()
 
 def save_predictions_as_imgs(
-    loader, model, folder="saved_images/", device="cuda"
+    loader, model, folder="saved_images/", device=DEVICE
 ):
     model.eval()
     for idx, (x, y) in enumerate(loader):
         x = x.to(device=device)
-        with torch.no_grad():
-            preds = torch.sigmoid(model(x))
-            preds = (preds > 0.5).float()
-        torchvision.utils.save_image(
-            preds, f"{folder}/pred_{idx}.png"
-        )
-        torchvision.utils.save_image(y, f"{folder}{idx}.png")
-        torchvision.utils.save_image(x, f"{folder}real{idx}.png")
+        fig, ax = plt.subplots(3, figsize=(18, 18))
+
+        preds = model(x)
+        val, _ = torch.max(preds, dim=1)
+        softmax = nn.Softmax(dim=1)
+        preds = torch.argmax(softmax(model(x)), axis=1).to('cpu')
+        img1 = np.transpose(np.array(x[0, :, :, :].to('cpu')), (1, 2, 0))
+        preds1 = np.array(preds[0, :, :])
+        mask1 = np.array(y[0, :, :])
+        ax[0].imshow(img1)
+        ax[1].imshow(preds1)
+        ax[2].imshow(mask1)
+        plt.savefig(f"{folder}real{idx}.png")
+        # plt.show()
 
     model.train()
 
@@ -105,16 +117,18 @@ transform = A.Compose(
         ToTensorV2(),
     ]
 )
-# DEVICE = 'cpu'
-# model = cnnModel().to(DEVICE)
 
-model = UNET(in_channels=3, out_channels=3).to(DEVICE)
+
+# DEVICE = 'cpu'
+model = cnnModel().to(DEVICE)
+model.cuda()
+
+# model = UNET(in_channels=3, out_channels=9).to(DEVICE)
 
 optimizer = optim.Adam(
      model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
 )
 loss_fn = nn.CrossEntropyLoss()
-scaler = torch.cuda.amp.GradScaler()
 
 load_checkpoint(torch.load(LOAD_MODEL_FILE), model, optimizer)
 
@@ -148,7 +162,9 @@ train_loader = DataLoader(
 #  )
 
 
-
+save_predictions_as_imgs(
+         train_loader, model, folder="saved_images/", device=DEVICE
+    )
 
 for epoch in range(EPOCHS):
 
@@ -157,16 +173,16 @@ for epoch in range(EPOCHS):
     for batch_idx, (x, y) in enumerate(loop):
         x, y = x.to(DEVICE), y.to(DEVICE)
 
-        with torch.cuda.amp.autocast():
-            out = model(x)
-            loss = loss_fn(out, y)
+
+        out = model(x)
+
+        loss = loss_fn(out, y)
 
 
         mean_loss.append(loss.item())
         optimizer.zero_grad()
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
+        loss.backward()
+        optimizer.step()
 
 
         # update progress bar
@@ -178,15 +194,13 @@ for epoch in range(EPOCHS):
         "optimizer": optimizer.state_dict(),
     }
 
-    if (epoch % 10 == 0):
-        save_checkpoint(checkpoint)
 
     check_accuracy(train_loader, model, device=DEVICE)
 
-    # print some examples to a folder
-    save_predictions_as_imgs(
-         train_loader, model, folder="saved_images/", device=DEVICE
-    )
+    # # # print some examples to a folder
+    # save_predictions_as_imgs(
+    #      train_loader, model, folder="saved_images/", device=DEVICE
+    # )
 
 
 
@@ -194,8 +208,5 @@ for epoch in range(EPOCHS):
         print("[INFO] EPOCH: {}/{}".format(epoch + 1, EPOCHS))
         print(f"Mean loss was {sum(mean_loss) / len(mean_loss)}")
 
-checkpoint = {
-               "state_dict": model.state_dict(),
-               "optimizer": optimizer.state_dict(),
-           }
-save_checkpoint(checkpoint, filename=LOAD_MODEL_FILE)
+
+save_checkpoint(checkpoint)
