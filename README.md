@@ -1,2 +1,3 @@
 # CNN
- All my projects related to CNN
+ Original learning of CNN
+ 
